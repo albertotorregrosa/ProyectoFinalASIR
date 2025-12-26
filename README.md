@@ -36,3 +36,4 @@ Actualmente se encuentran operativos:
 ## Autores
 - Nazareth Pons Martínez
 - Alberto Torregrosa Montes
+- Javier Barrajón Díaz
