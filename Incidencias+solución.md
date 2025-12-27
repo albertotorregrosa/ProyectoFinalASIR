@@ -20,6 +20,7 @@ A continuación se detallan los errores detectados y las soluciones aplicadas.
 ```text
 WARN a network with name root_default exists but was not created by compose.
 network root_default was found but has incorrect label
+```
 Causa
 Existía una red Docker llamada root_default creada previamente, pero no gestionada por Docker Compose.
 Al no coincidir las etiquetas internas esperadas por Compose, el despliegue del stack quedaba bloqueado y los contenedores no llegaban a crearse.
