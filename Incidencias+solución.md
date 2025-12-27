@@ -1,8 +1,9 @@
+Te dejo tu texto reformateado y mejorado (copia/pega tal cual):
+
 ## 🛠️ Gestión de Incidencias y Resolución de Errores
 
-Durante la ejecución del despliegue del MVP se produjeron diversas incidencias técnicas.
-Lejos de considerarse un problema, estas incidencias permitieron validar el funcionamiento
-real de la infraestructura y aplicar procedimientos de diagnóstico y resolución.
+Durante la ejecución del despliegue del MVP se produjeron diversas incidencias técnicas.  
+Estas incidencias permitieron validar el funcionamiento real de la infraestructura y aplicar procedimientos de diagnóstico y resolución.
 
 A continuación se detallan los errores detectados y las soluciones aplicadas.
 
@@ -11,24 +12,21 @@ A continuación se detallan los errores detectados y las soluciones aplicadas.
 ### ❌ Incidencia 1: Docker Compose no creaba contenedores
 
 **Síntomas**
-- El comando `docker compose up -d` se ejecutaba sin errores críticos.
-- Al ejecutar `docker ps -a` no aparecía ningún contenedor.
-- Docker mostraba advertencias relacionadas con la red `root_default`.
+- `docker compose up -d` se ejecutaba sin errores críticos.
+- `docker ps -a` no mostraba ningún contenedor.
+- Aparecían avisos relacionados con la red `root_default`.
 
 **Mensaje observado**
 ```text
 WARN a network with name root_default exists but was not created by compose.
 network root_default was found but has incorrect label
-
 Causa
-Existía una red Docker llamada root_default creada previamente en el sistema,
-pero no gestionada por Docker Compose.
-Al no coincidir las etiquetas internas esperadas por Compose, el despliegue del stack
-quedaba bloqueado y los contenedores no llegaban a crearse.
+Existía una red Docker llamada root_default creada previamente, pero no gestionada por Docker Compose.
+Al no coincidir las etiquetas internas esperadas por Compose, el despliegue del stack quedaba bloqueado y los contenedores no llegaban a crearse.
 
 Solución aplicada
 
-Comprobación de contenedores existentes:
+Comprobación de contenedores:
 
 docker ps -a
 Eliminación de la red conflictiva:
@@ -48,13 +46,12 @@ El contenedor de MariaDB se reiniciaba continuamente.
 No era posible acceder a la base de datos.
 
 Causa
-MariaDB requiere obligatoriamente la variable de entorno MYSQL_ROOT_PASSWORD
-para inicializar la base de datos.
+MariaDB requiere obligatoriamente la variable MYSQL_ROOT_PASSWORD para inicializarse.
 Al no estar definida, el contenedor fallaba durante el arranque.
 
 Solución aplicada
 
-Revisión de logs del contenedor:
+Revisión de logs:
 
 docker logs <contenedor_mariadb>
 Definición correcta de variables en docker-compose.yml:
@@ -76,19 +73,18 @@ Síntomas
 Al intentar acceder a MariaDB mediante:
 
 docker exec -it mariaDB mysql -u root -p
-Docker devolvía el error:
+aparecía:
 
 No such container: mariaDB
 Causa
-mariaDB es el nombre del servicio definido en Docker Compose, pero Docker asigna
-un nombre real automático al contenedor (por ejemplo: proyecto-mariaDB-1).
+mariaDB era el nombre del servicio en Docker Compose, pero el contenedor tenía un nombre real automático (ej.: proyecto-mariaDB-1).
 
 Solución aplicada
 
-Identificación del nombre real del contenedor:
+Identificación del nombre real:
 
 docker ps
-Acceso correcto al contenedor:
+Acceso usando el nombre real:
 
 docker exec -it <nombre_real_contenedor> mysql -u root -p
 Resultado
@@ -96,13 +92,11 @@ Se pudo acceder correctamente a la base de datos.
 
 ❌ Incidencia 4: n8n no podía conectarse a MariaDB
 Síntomas
-En n8n aparecía el siguiente error al ejecutar el workflow:
+En n8n aparecía:
 
 Access denied for user 'gira_user'@'172.18.0.4'
 Causa
-n8n y MariaDB se ejecutan en contenedores distintos.
-MariaDB recibía la conexión desde una IP interna de Docker (172.18.0.x), pero
-el usuario de la base de datos solo tenía permisos desde localhost.
+n8n y MariaDB estaban en contenedores distintos. MariaDB recibía la conexión desde una IP interna de Docker (172.18.0.x), pero el usuario solo tenía permisos desde localhost.
 
 Solución aplicada
 
@@ -114,11 +108,11 @@ Creación del usuario con permisos desde cualquier host:
 CREATE USER 'gira_user'@'%' IDENTIFIED BY 'gira_pass';
 GRANT ALL PRIVILEGES ON gira_db.* TO 'gira_user'@'%';
 FLUSH PRIVILEGES;
-Configuración correcta del nodo MySQL en n8n usando:
+Configuración correcta en n8n:
 
-Host: nombre del servicio Docker (mariaDB)
+Host: mariaDB (nombre del servicio Docker)
 
 Puerto: 3306
 
 Resultado
-n8n se conectó correctamente a MariaDB y pudo listar y consultar datos.
+n8n se conectó correctamente a MariaDB y pudo listar/consultar datos.
