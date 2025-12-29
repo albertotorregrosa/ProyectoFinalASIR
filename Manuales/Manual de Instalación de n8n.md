@@ -221,5 +221,4 @@ Tras completar estos pasos se dispone de:
 - Conexión funcional con MariaDB  
 - Workflows básicos operativos  
 - Webhooks preparados para su consumo desde la aplicación web  
-- Infraestructura lista para la integración con el frontend  
-```
+- Infraestructura lista para la integración con el frontend 
