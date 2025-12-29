@@ -1,60 +1,57 @@
+# Manual (solo web): creación, modificación e integración con n8n/MariaDB
 
-# Manual de Creación y Configuración de la Web del Proyecto
+## 1. Qué se ha creado
 
-## 1. Objetivo de la web
-
-El objetivo de la web es actuar como **interfaz de usuario** del sistema de reservas del instituto.  
-Desde la web los usuarios podrán:
-
-- Consultar disponibilidad de aulas y dispositivos  
-- Realizar solicitudes de reserva  
-- Visualizar horarios y reservas existentes  
-
-La web no contiene la lógica de negocio, sino que actúa como **frontend**, comunicándose con el backend (n8n) mediante peticiones HTTP a webhooks.
+Se ha creado un **frontend** alojado en **Hostinger (hosting compartido)** para el dominio `girahub.es`.  
+Este frontend servirá páginas HTML/CSS/JS y enviará solicitudes al backend (n8n). La web **no accede directamente** a la base de datos.
 
 ---
 
-## 2. Arquitectura de la solución web
+## 2. Cómo se ha creado en Hostinger (pasos realizados)
 
-La arquitectura sigue un modelo distribuido:
+### 2.1 Acceso al panel correcto
 
-- Frontend: Web alojada en hosting compartido (Hostinger)  
-- Backend: n8n desplegado en un VPS  
-- Base de datos: MariaDB en el mismo VPS  
+Hostinger → **Sitios web** → `girahub.es`
 
-Flujo de funcionamiento:
+### 2.2 Elección de panel de gestión
 
-1. El usuario interactúa con la web  
-2. La web envía peticiones HTTP a n8n  
-3. n8n procesa la lógica y accede a MariaDB  
-4. n8n devuelve la respuesta a la web  
+Se seleccionó **cPanel** (no WordPress) para poder trabajar con archivos reales del sitio.
 
----
+### 2.3 Migración del sitio a hosting web clásico
 
-## 3. Plataforma de alojamiento
+Se realizó la migración a **cPanel y WHM** para habilitar:
 
-### 3.1 Hosting utilizado
-
-- Proveedor: Hostinger  
-- Tipo: Hosting web compartido  
-- Acceso mediante panel de control (hPanel)  
-
-Este tipo de hosting es suficiente para:
-
-- Servir contenido web  
-- Gestionar formularios  
-- Realizar peticiones HTTP al backend  
+- Administrador de archivos  
+- Carpeta `public_html`  
+- Edición de `index.html`  
 
 ---
 
-## 4. Creación de la estructura web
+## 3. Dónde están los archivos de la web
 
-### 4.1 Estructura básica de archivos
+En cPanel:
 
-La web se organiza con una estructura simple:
+- **File Manager / Administrador de archivos**  
+- Ruta:
 
 ```text
-/public_html
+public_html/
+```
+
+---
+
+## 4. Cómo se modifica la web
+
+### 4.1 Editar `index.html`
+
+cPanel → File Manager → `public_html` → `index.html` → Editar → Guardar.
+
+### 4.2 Organización recomendada de archivos
+
+Dentro de `public_html`:
+
+```text
+public_html/
 ├── index.html
 ├── css/
 │   └── styles.css
@@ -62,126 +59,61 @@ La web se organiza con una estructura simple:
     └── app.js
 ```
 
-Esta estructura permite separar:
-
-- Contenido (HTML)  
-- Estilos (CSS)  
-- Lógica de cliente (JavaScript)  
+- `index.html`: estructura y formulario  
+- `css/styles.css`: estilos  
+- `js/app.js`: lógica (envío al backend)  
 
 ---
 
-## 5. Página principal (`index.html`)
+## 5. Cómo se conecta la web con el sistema (n8n + MariaDB)
 
-La página principal incluye:
+### 5.1 Modelo de conexión (sin acceso directo a la BD)
 
-- Presentación del proyecto  
-- Formulario de creación de reservas  
-- Zona de visualización de resultados  
-
-Ejemplo de formulario:
-
-```html
-<form id="reservaForm">
-  <input type="text" name="aula" placeholder="Aula" required>
-  <input type="text" name="dispositivo" placeholder="Dispositivo" required>
-  <input type="date" name="fecha" required>
-  <input type="time" name="hora_inicio" required>
-  <input type="time" name="hora_fin" required>
-  <input type="text" name="curso" placeholder="Curso" required>
-  <button type="submit">Reservar</button>
-</form>
-```
-
----
-
-## 6. Comunicación con el backend (n8n)
-
-### 6.1 Uso de webhooks
-
-La web se comunica con n8n mediante peticiones HTTP a webhooks expuestos por el backend.
-
-Ejemplo de endpoint:
+La web se conecta a n8n mediante HTTP, y n8n es quien escribe/lee en MariaDB:
 
 ```text
-https://subdominio.dominio/webhook/crear-reserva
+Web (Hostinger) → Webhook (n8n en VPS) → MariaDB (VPS)
 ```
 
-### 6.2 Lógica JavaScript
+**Motivo:** seguridad y separación de capas (la BD no se expone a internet).
 
-El archivo `app.js` gestiona el envío de datos del formulario:
+### 5.2 Qué necesita la web para "conectar"
 
-```javascript
-document.getElementById('reservaForm').addEventListener('submit', function (e) {
-  e.preventDefault();
+1. Un formulario en `index.html` con los campos del MVP (los mismos que usa el workflow):
+   - `aula`  
+   - `dispositivo`  
+   - `fecha`  
+   - `hora_inicio`  
+   - `hora_fin`  
+   - `curso`  
 
-  const data = {
-    aula: e.target.aula.value,
-    dispositivo: e.target.dispositivo.value,
-    fecha: e.target.fecha.value,
-    hora_inicio: e.target.hora_inicio.value,
-    hora_fin: e.target.hora_fin.value,
-    curso: e.target.curso.value,
-  };
+2. Un script (`app.js`) que haga un `POST` en JSON al webhook de n8n, por ejemplo:
 
-  fetch('https://subdominio.dominio/webhook/crear-reserva', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  })
-    .then((response) => response.json())
-    .then((result) => {
-      console.log('Reserva creada', result);
-      // Aquí se podría actualizar la interfaz o mostrar un mensaje al usuario
-    })
-    .catch((error) => {
-      console.error('Error al crear la reserva', error);
-    });
-});
+```text
+https://SUBDOMINIO.DOMINIO/webhook/crear-reserva
 ```
 
-Esta lógica:
+### 5.3 Envío típico desde la web (descripción)
 
-- Recoge los datos del formulario  
-- Los envía al webhook de n8n  
-- Recibe la respuesta del backend  
-
----
-
-## 7. Seguridad básica de la web
-
-Las medidas aplicadas incluyen:
-
-- Uso de HTTPS para todas las comunicaciones  
-- No exposición directa de la base de datos  
-- Separación entre frontend y backend  
-- Validación de datos en el backend (n8n)  
+- El usuario rellena el formulario.  
+- JavaScript captura el submit.  
+- Se envía un JSON al webhook de n8n.  
+- n8n valida e inserta en MariaDB.  
+- n8n devuelve una respuesta (ok/error) y la web la muestra.  
 
 ---
 
-## 8. Pruebas de funcionamiento
+## 6. Prueba mínima para verificar que "la web está conectada"
 
-Se realizan las siguientes comprobaciones:
-
-- Acceso correcto a la web desde navegador  
-- Envío de formularios sin errores  
-- Recepción de datos en n8n  
-- Inserción de datos en MariaDB  
-- Respuesta correcta del webhook  
-
-Estas pruebas validan la correcta integración entre web, backend y base de datos.
+- La web carga desde `girahub.es`.  
+- Al enviar el formulario, el workflow de n8n se ejecuta.  
+- En MariaDB aparece una fila nueva en la tabla `reservas`.  
 
 ---
 
-## 9. Resultado final
+## 7. Qué se puede ampliar después (sin cambiar el hosting)
 
-Al finalizar estos pasos se dispone de:
-
-- Web funcional alojada en Hostinger  
-- Interfaz de usuario para el sistema de reservas  
-- Comunicación correcta con n8n mediante webhooks  
-- Integración completa con la base de datos MariaDB  
-- Arquitectura distribuida operativa y escalable  
-
-La web queda preparada para futuras mejoras como autenticación de usuarios, gestión de roles y visualización avanzada de horarios.
+- Añadir páginas (disponibilidad, listado de reservas)  
+- Mostrar respuestas en pantalla (mensajes de éxito/error)  
+- Añadir autenticación y roles (admin/profesor)  
+- Consumir webhooks de "listar reservas" (GET) para pintar tablas en la web 
