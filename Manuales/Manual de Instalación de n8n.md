@@ -1,4 +1,3 @@
-```markdown
 # Manual de Despliegue y Configuración del Servicio n8n
 
 ## 1. Objetivo del servicio n8n
@@ -224,5 +223,3 @@ Tras completar estos pasos se dispone de:
 - Webhooks preparados para su consumo desde la aplicación web  
 - Infraestructura lista para la integración con el frontend  
 ```
-
-Si quieres, luego te hago un índice enlazado para los dos manuales (MariaDB + n8n) juntos.
