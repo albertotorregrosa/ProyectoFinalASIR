@@ -1,4 +1,3 @@
-#GNU nano 7.2                                                                                                                                                                                                                                                       docker-compose.yml
 services:
   traefik:
     image: traefik
@@ -21,6 +20,7 @@ services:
     volumes:
       - traefik_data:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro
+
   n8n:
     image: docker.n8n.io/n8nio/n8n
     labels:
@@ -51,20 +51,55 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
       - /local-files:/files
+
   mariaDB:
     image: mariadb:10.11
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: contraseña_root
+      MYSQL_ROOT_PASSWORD: contrasena_root
       MYSQL_DATABASE: gira_db
       MYSQL_USER: gira_user
-      MYSQL_PASSWORD: contraseña_user
+      MYSQL_PASSWORD: contrasena_user
     ports:
       - "3306:3306"
     volumes:
       - /docker/mariadb:/var/lib/mysql
+
+  ldap:
+    image: osixia/openldap:1.5.0
+    container_name: ldap
+    restart: always
+    environment:
+      LDAP_ORGANISATION: "GIRAHUB"
+      LDAP_DOMAIN: "girahub.local"
+      LDAP_ADMIN_PASSWORD: "ldap_admin_pass"
+      LDAP_CONFIG_PASSWORD: "ldap_config_pass"
+      LDAP_TLS: "false"
+    volumes:
+      - ldap_data:/var/lib/ldap
+      - ldap_config:/etc/ldap/slapd.d
+
+  phpldapadmin:
+    image: osixia/phpldapadmin:0.9.0
+    container_name: phpldapadmin
+    restart: always
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: "ldap"
+      PHPLDAPADMIN_HTTPS: "false"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pla.rule=Host(`ldap.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.pla.entrypoints=websecure"
+      - "traefik.http.routers.pla.tls=true"
+      - "traefik.http.routers.pla.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.pla.loadbalancer.server.port=80"
+    depends_on:
+      - ldap
+
 volumes:
   traefik_data:
     external: true
   n8n_data:
     external: true
+  ldap_data:
+  ldap_config:
