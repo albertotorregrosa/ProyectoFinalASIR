@@ -1,3 +1,4 @@
+  GNU nano 7.2                                                                                                                                                                                                                                                         docker-compose.yml
 services:
   traefik:
     image: traefik
@@ -42,8 +43,10 @@ services:
       - N8N_HOST=${SUBDOMAIN}.${DOMAIN_NAME}
       - N8N_PORT=5678
       - N8N_PROTOCOL=https
-      - NODE_ENV=production
+      - N8N_EDITOR_BASE_URL=https://${SUBDOMAIN}.${DOMAIN_NAME}
+      - N8N_PUBLIC_URL=https://${SUBDOMAIN}.${DOMAIN_NAME}
       - WEBHOOK_URL=https://${SUBDOMAIN}.${DOMAIN_NAME}/
+      - NODE_ENV=production
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
     restart: always
     ports:
@@ -103,3 +106,5 @@ volumes:
     external: true
   ldap_data:
   ldap_config:
+
+
