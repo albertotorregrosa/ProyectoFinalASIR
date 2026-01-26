@@ -15,30 +15,41 @@ services:
       - --certificatesresolvers.mytlschallenge.acme.storage=/letsencrypt/acme.json
     restart: always
     ports:
-      - "80:80"
-      - "443:443"
+      - 80:80
+      - 443:443
     volumes:
       - traefik_data:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
   n8n:
     image: docker.n8n.io/n8nio/n8n
-    restart: always
     labels:
       - traefik.enable=true
       - traefik.http.routers.n8n.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`)
-      - traefik.http.routers.n8n.entrypoints=websecure
       - traefik.http.routers.n8n.tls=true
+      - traefik.http.routers.n8n.entrypoints=web,websecure
       - traefik.http.routers.n8n.tls.certresolver=mytlschallenge
-      - traefik.http.services.n8n.loadbalancer.server.port=5678
+      - traefik.http.middlewares.n8n.headers.SSLRedirect=true
+      - traefik.http.middlewares.n8n.headers.STSSeconds=315360000
+      - traefik.http.middlewares.n8n.headers.browserXSSFilter=true
+      - traefik.http.middlewares.n8n.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.n8n.headers.forceSTSHeader=true
+      - traefik.http.middlewares.n8n.headers.SSLHost=${DOMAIN_NAME}
+      - traefik.http.middlewares.n8n.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.n8n.headers.STSPreload=true
+      - traefik.http.routers.n8n.middlewares=n8n@docker
     environment:
       - N8N_HOST=${SUBDOMAIN}.${DOMAIN_NAME}
+      - N8N_PORT=5678
       - N8N_PROTOCOL=https
       - N8N_EDITOR_BASE_URL=https://${SUBDOMAIN}.${DOMAIN_NAME}
       - N8N_PUBLIC_URL=https://${SUBDOMAIN}.${DOMAIN_NAME}
       - WEBHOOK_URL=https://${SUBDOMAIN}.${DOMAIN_NAME}/
       - NODE_ENV=production
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+    restart: always
+    ports:
+      - 127.0.0.1:5678:5678
     volumes:
       - n8n_data:/home/node/.n8n
       - /local-files:/files
@@ -70,6 +81,17 @@ services:
       - ldap_data:/var/lib/ldap
       - ldap_config:/etc/ldap/slapd.d
 
+  ldap-auth:
+    image: php:8.2-cli
+    container_name: ldap-auth
+    restart: always
+    volumes:
+      - ./ldap-auth:/app
+    command: php -S 0.0.0.0:9000 -t /app
+    depends_on:
+      - ldap
+
+
   phpldapadmin:
     image: osixia/phpldapadmin:0.9.0
     container_name: phpldapadmin
@@ -78,12 +100,12 @@ services:
       PHPLDAPADMIN_LDAP_HOSTS: "ldap"
       PHPLDAPADMIN_HTTPS: "false"
     labels:
-      - traefik.enable=true
-      - traefik.http.routers.pla.rule=Host(`ldap.${DOMAIN_NAME}`)
-      - traefik.http.routers.pla.entrypoints=websecure
-      - traefik.http.routers.pla.tls=true
-      - traefik.http.routers.pla.tls.certresolver=mytlschallenge
-      - traefik.http.services.pla.loadbalancer.server.port=80
+      - "traefik.enable=true"
+      - "traefik.http.routers.pla.rule=Host(`ldap.${DOMAIN_NAME}`)"
+      - "traefik.http.routers.pla.entrypoints=websecure"
+      - "traefik.http.routers.pla.tls=true"
+      - "traefik.http.routers.pla.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.pla.loadbalancer.server.port=80"
     depends_on:
       - ldap
 
