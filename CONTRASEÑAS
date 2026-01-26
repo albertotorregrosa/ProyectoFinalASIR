@@ -11,3 +11,7 @@ CONTRASEÑA TERMINAL HOSTINGER:
 CONTRASEÑA N8N:
 info.proagentsai@gmail.com
 25082024.MyA
+
+CONTRASELA LDAP:
+Login DN: cn=admin,dc=girahub,dc=local
+Password: ldap_admin_pass
