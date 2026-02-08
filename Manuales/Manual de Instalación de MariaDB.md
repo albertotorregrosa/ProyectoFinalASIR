@@ -116,7 +116,7 @@ Se verifica que el contenedor de MariaDB se encuentra en estado `Running`.
 Acceso al contenedor:
 
 ```bash
-docker exec -it <contenedor_mariadb> mysql -u root -p
+docker exec -it root-mariaDB-1 mysql -u root -p
 ```
 
 Una vez dentro, se comprueba la existencia de la base de datos:
