@@ -15,3 +15,12 @@ info.proagentsai@gmail.com
 CONTRASELA LDAP:
 Login DN: cn=admin,dc=girahub,dc=local
 Password: ldap_admin_pass
+
+BASE DE DATOS
+
+| Variable              | Valor           |
+| --------------------- | --------------- |
+| MYSQL_ROOT_PASSWORD | contraseña_root |
+| MYSQL_DATABASE      | gira_db         |
+| MYSQL_USER          | gira_user       |
+| MYSQL_PASSWORD      | contraseña_user |
