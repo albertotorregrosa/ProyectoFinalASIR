@@ -7,6 +7,10 @@ girahub1@gmail.com, totejavinaza$
 CONTRASEÑA TERMINAL HOSTINGER:
 987654321aA&
 
+CREATE USER 'usuario_web'@'%' IDENTIFIED BY 'tu_password';
+GRANT ALL PRIVILEGES ON NOMBRE_BD.* TO 'usuario_web'@'%';
+FLUSH PRIVILEGES;
+
 
 CONTRASEÑA N8N:
 info.proagentsai@gmail.com
