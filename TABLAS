@@ -1,0 +1,54 @@
+RESERVAS:
+MariaDB [gira_db]> describe reservas;
++------------+--------------------------------+------+-----+---------------------+-------------------------------+
+| Field      | Type                           | Null | Key | Default             | Extra                         |
++------------+--------------------------------+------+-----+---------------------+-------------------------------+
+| id         | bigint(20) unsigned            | NO   | PRI | NULL                | auto_increment                |
+| aula_id    | int(10) unsigned               | NO   | MUL | NULL                |                               |
+| usuario_id | int(10) unsigned               | NO   | MUL | NULL                |                               |
+| inicio     | datetime                       | NO   |     | NULL                |                               |
+| fin        | datetime                       | NO   |     | NULL                |                               |
+| estado     | enum('CONFIRMADA','CANCELADA') | NO   |     | CONFIRMADA          |                               |
+| created_at | timestamp                      | NO   |     | current_timestamp() |                               |
+| updated_at | timestamp                      | YES  |     | NULL                | on update current_timestamp() |
++------------+--------------------------------+------+-----+---------------------+-------------------------------+
+
+
+
+AULAS:
+MariaDB [gira_db]> select * from aulas;
++----+--------+----------+------+-----------+-----------+--------+---------------------+------------+
+| id | codigo | nombre   | tipo | capacidad | ubicacion | activa | created_at          | updated_at |
++----+--------+----------+------+-----------+-----------+--------+---------------------+------------+
+|  1 | 101    | Aula 101 | AULA |        30 | Planta 1  |      1 | 2026-02-09 19:05:29 | NULL       |
+|  2 | 102    | Aula 102 | AULA |        30 | Planta 1  |      1 | 2026-02-09 19:05:29 | NULL       |
+|  3 | 103    | Aula 103 | AULA |        30 | Planta 1  |      1 | 2026-02-09 19:05:29 | NULL       |
+|  4 | 104    | Aula 104 | AULA |        30 | Planta 1  |      1 | 2026-02-09 19:05:29 | NULL       |
+|  5 | 105    | Aula 105 | AULA |        30 | Planta 1  |      1 | 2026-02-09 19:05:29 | NULL       |
++----+--------+----------+------+-----------+-----------+--------+---------------------+------------+
+
+
+
+USUARIOS;
+MariaDB [gira_db]> describe usuarios;
++------------+-----------------------------------+------+-----+---------------------+-------------------------------+
+| Field      | Type                              | Null | Key | Default             | Extra                         |
++------------+-----------------------------------+------+-----+---------------------+-------------------------------+
+| id         | int(10) unsigned                  | NO   | PRI | NULL                | auto_increment                |
+| ldap_uid   | varchar(100)                      | NO   | UNI | NULL                |                               |
+| nombre     | varchar(100)                      | NO   |     | NULL                |                               |
+| apellidos  | varchar(150)                      | NO   |     | NULL                |                               |
+| email      | varchar(150)                      | YES  |     | NULL                |                               |
+| estado     | enum('ACTIVO','BLOQUEADO')        | NO   |     | ACTIVO              |                               |
+| rol        | enum('ADMIN','PROFESOR','ALUMNO') | NO   |     | ALUMNO              |                               |
+| created_at | timestamp                         | NO   |     | current_timestamp() |                               |
+| updated_at | timestamp                         | YES  |     | NULL                | on update current_timestamp() |
++------------+-----------------------------------+------+-----+---------------------+-------------------------------+
+
+MariaDB [gira_db]> select * from usuarios;
++----+-----------+----------------+----------------+-----------------+--------+----------+---------------------+------------+
+| id | ldap_uid  | nombre         | apellidos      | email           | estado | rol      | created_at          | updated_at |
++----+-----------+----------------+----------------+-----------------+--------+----------+---------------------+------------+
+|  1 | naza      | Nazareth       | Pons Martinez  | naza@girahub.es | ACTIVO | ALUMNO   | 2026-01-25 23:12:12 | NULL       |
+|  5 | dgranados | David Granados | David Granados | NULL            | ACTIVO | PROFESOR | 2026-01-26 15:05:18 | NULL       |
++----+-----------+----------------+----------------+-----------------+--------+----------+---------------------+------------+
