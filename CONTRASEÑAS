@@ -10,10 +10,15 @@ contraseña_root
 CONTRASEÑA TERMINAL HOSTINGER:
 987654321aA&
 
-CREATE USER 'usuario_web'@'%' IDENTIFIED BY 'tu_password';
+exportar base de datos:
+docker exec -i root-mariaDB-1 mysqldump -u root -p gira_db > backup.sql
+
+CREATE USER 'alberto'@'%' IDENTIFIED BY '123456';
 GRANT ALL PRIVILEGES ON NOMBRE_BD.* TO 'usuario_web'@'%';
 FLUSH PRIVILEGES;
 
+contraseña base de datos de la web:
+T6#rIAtnD
 
 CONTRASEÑA N8N:
 info.proagentsai@gmail.com
