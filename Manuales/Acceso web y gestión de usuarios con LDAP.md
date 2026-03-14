@@ -1,188 +1,253 @@
-# Acceso web y gestión de usuarios y grupos en LDAP
 
-## 1. Objetivo del documento
+📖 Manual de Integración: OpenLDAP + PHP (MariaDB) con Auto-Registro (JIT Provisioning)
+=======================================================================================
 
-Este documento describe cómo acceder a la **interfaz web de LDAP** y cómo gestionar usuarios y grupos utilizando **phpLDAPadmin**, sin necesidad de usar la terminal.
+📌 Introducción
+---------------
 
-Está orientado a usuarios administradores que necesiten:
+Este documento detalla la implementación del sistema de autenticación centralizada para **GiraHub**. El sistema utiliza un servidor **OpenLDAP** para validar las credenciales de los usuarios y aplica un modelo de **Just-In-Time (JIT) Provisioning** para registrarlos automáticamente en la base de datos **MariaDB** con su rol correspondiente según la Unidad Organizativa (OU) a la que pertenezcan.
 
-- Crear usuarios  
-- Crear grupos  
-- Modificar contraseñas  
-- Verificar la estructura del directorio  
+🏗️ Arquitectura
+----------------
 
----
+-   **Backend:** PHP (con extensión LDAP activada) + `mysqli`.
 
-## 2. Acceso a la interfaz web de LDAP
+-   **Base de Datos:** MariaDB (Contenedor Docker).
 
-### 2.1 URL de acceso
+-   **Directorio Activo:** OpenLDAP (Contenedor Docker).
 
-El acceso a la administración de LDAP se realiza mediante un navegador web en la siguiente dirección:
+-   **Gestor LDAP:** phpLDAPadmin (Contenedor Docker).
 
-```text
-https://ldap.girahub.es
+* * * * *
+
+🚀 1. Configuración de la Infraestructura (Docker)
+--------------------------------------------------
+
+Para desplegar el servicio LDAP y su panel de gestión, añadimos estos servicios a nuestro `docker-compose.yml`:
+
+YAML
+
+```
+  ldap:
+    image: osixia/openldap:1.5.0
+    container_name: ldap
+    restart: always
+    ports:
+      - "8443:389" # Puerto expuesto para la conexión PHP
+    environment:
+      LDAP_ORGANISATION: "GIRAHUB"
+      LDAP_DOMAIN: "girahub.local"
+      LDAP_ADMIN_PASSWORD: "ldap_admin_pass"
+
+  phpldapadmin:
+    image: osixia/phpldapadmin:0.9.0
+    container_name: phpldapadmin
+    ports:
+      - "8081:80" # Mapeo crucial para acceder al panel web
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: "ldap"
+      PHPLDAPADMIN_HTTPS: "false"
+    depends_on:
+      - ldap
+
 ```
 
-La conexión está protegida mediante HTTPS gracias a certificados emitidos por Let’s Encrypt.
+* * * * *
 
-### 2.2 Credenciales de acceso
+🧠 2. La Lógica: Auto-Registro (JIT Provisioning)
+-------------------------------------------------
 
-Para acceder a phpLDAPadmin se utiliza el **usuario administrador** del directorio LDAP.
+El flujo de inicio de sesión no requiere que el administrador duplique el trabajo creando usuarios en LDAP y en MariaDB. El proceso es:
 
-Usuario (DN):
+1.  El usuario introduce credenciales en la web.
 
-```text
-cn=admin,dc=girahub,dc=local
+2.  PHP verifica la contraseña contra LDAP.
+
+3.  Si es válida, PHP lee la ruta (DN) del usuario en LDAP para saber su rol (`ou=Profesores`, `ou=Alumnos`, `ou=Admin`).
+
+4.  Si el usuario no existe en MariaDB, **el sistema lo inserta automáticamente** en ese instante.
+
+### Código: `includes/auth_ldap.php` (El Buscador)
+
+PHP
+
+```
+<?php
+function autenticar_y_obtener_datos($username, $password) {
+    $host = "31.97.157.220";
+    $port = 8443;
+    $base_dn = "dc=girahub,dc=local";
+
+    $ldap_admin = "cn=admin,dc=girahub,dc=local";
+    $ldap_pass = "ldap_admin_pass";
+
+    // Conexión a LDAP usando el formato URI
+    $ds = ldap_connect("ldap://$host:$port");
+    ldap_set_option($ds, LDAP_OPT_PROTOCOL_VERSION, 3);
+    ldap_set_option($ds, LDAP_OPT_REFERRALS, 0);
+
+    if (!$ds) return ['success' => false, 'debug' => 'Fallo de conexión al servidor LDAP.'];
+
+    // 1. Bind como Admin para buscar al usuario
+    if (!@ldap_bind($ds, $ldap_admin, $ldap_pass)) return ['success' => false, 'debug' => 'Credenciales de Admin LDAP incorrectas.'];
+
+    // 2. Buscar al usuario
+    $search = @ldap_search($ds, $base_dn, "(uid=$username)");
+    $entries = @ldap_get_entries($ds, $search);
+
+    if ($entries['count'] == 0) return ['success' => false, 'debug' => "Usuario inexistente en LDAP."];
+
+    // 3. Bind con las credenciales del usuario
+    $user_dn = $entries[0]['dn'];
+    if (!@ldap_bind($ds, $user_dn, $password)) return ['success' => false, 'debug' => 'Contraseña incorrecta.'];
+
+    // 4. Asignación automática de rol basada en la OU
+    $rol = 'ALUMNO';
+    $ruta_minusculas = strtolower($user_dn);
+    if (strpos($ruta_minusculas, 'ou=profesores') !== false) $rol = 'PROFESOR';
+    elseif (strpos($ruta_minusculas, 'ou=admin') !== false) $rol = 'ADMIN';
+
+    @ldap_close($ds);
+    return [
+        'success' => true,
+        'rol' => $rol,
+        'nombre' => $entries[0]['givenname'][0] ?? $username,
+        'apellidos' => $entries[0]['sn'][0] ?? '',
+        'email' => $entries[0]['mail'][0] ?? "$username@girahub.es"
+    ];
+}
+?>
+
 ```
 
-Contraseña:  
-La definida durante la creación del contenedor LDAP.
+### Código: `login.php` (El Gestor de Sesiones con `mysqli`)
 
-> ⚠️ No se accede con un usuario normal, sino con el **DN completo del administrador**.
+PHP
 
----
+```
+<?php
+session_start();
+require_once 'conexion.php';
+require_once 'includes/auth_ldap.php';
 
-## 3. Estructura del directorio LDAP
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $user = $_POST['usuario'];
+    $pass = $_POST['password'];
 
-Una vez autenticado, se muestra el árbol LDAP.  
-La estructura utilizada en el proyecto es la siguiente:
+    $datos_ldap = autenticar_y_obtener_datos($user, $pass);
 
-```text
-dc=girahub,dc=local
- ├── ou=usuarios
- │    └── cn=David Granados
- └── ou=grupos
-      └── cn=Profesores
+    if ($datos_ldap['success'] === true) {
+
+        // Buscar en MariaDB
+        $stmt = $conn->prepare("SELECT id, nombre, rol FROM usuarios WHERE ldap_uid = ? AND estado = 'ACTIVO'");
+        $stmt->bind_param("s", $user);
+        $stmt->execute();
+        $usuario_db = $stmt->get_result()->fetch_assoc();
+
+        // JIT Provisioning: Si no existe, lo creamos
+        if (!$usuario_db) {
+            $stmt_insert = $conn->prepare("INSERT INTO usuarios (ldap_uid, nombre, apellidos, email, rol, estado) VALUES (?, ?, ?, ?, ?, 'ACTIVO')");
+            $stmt_insert->bind_param("sssss", $user, $datos_ldap['nombre'], $datos_ldap['apellidos'], $datos_ldap['email'], $datos_ldap['rol']);
+            $stmt_insert->execute();
+
+            $stmt->execute();
+            $usuario_db = $stmt->get_result()->fetch_assoc();
+        }
+
+        // Iniciar Sesión
+        $_SESSION['usuario_id'] = $usuario_db['id'];
+        $_SESSION['nombre'] = $usuario_db['nombre'];
+        $_SESSION['rol'] = $usuario_db['rol'];
+        header("Location: index.php");
+        exit;
+
+    } else {
+        $error = "Error: " . ($datos_ldap['debug'] ?? "Credenciales incorrectas.");
+    }
+}
+?>
+
 ```
 
-**Explicación:**
+* * * * *
 
-- `dc=girahub,dc=local` → Dominio raíz del directorio  
-- `ou=usuarios` → Unidad organizativa para usuarios  
-- `ou=grupos` → Unidad organizativa para grupos  
-- `cn=David Granados` → Usuario de ejemplo (profesor)  
+🐛 3. Diario de Errores y Soluciones (Troubleshooting)
+------------------------------------------------------
 
-Esta estructura es estándar, clara y fácilmente ampliable.
+Durante el desarrollo nos encontramos con varios bloqueos técnicos que solucionamos así:
 
----
+1.  **Error:** `phpLDAPadmin` inaccesible desde el navegador.
 
-## 4. Creación de unidades organizativas (OU)
+    -   **Causa:** El contenedor funcionaba en los puertos 80/443 internamente, pero no estaban expuestos al VPS.
 
-Las unidades organizativas permiten ordenar el directorio LDAP.
+    -   **Solución:** Modificar `docker-compose.yml` para mapear el puerto (`8081:80`) y abrir el puerto 8081 en el Firewall del VPS.
 
-### 4.1 Crear `ou=usuarios`
+2.  **Error:** Al crear un usuario en phpLDAPadmin salta la alerta `This attribute is required: GID Number`, pero el desplegable está vacío.
 
-1. Seleccionar `dc=girahub,dc=local`  
-2. Pulsar **⭐ Create a child entry**  
-3. Seleccionar **Generic: Organizational Unit**  
-4. Introducir:
-   - `ou: usuarios`  
-5. Confirmar con **Create Object → Commit**  
+    -   **Causa:** Una cuenta `posixAccount` necesita pertenecer a un grupo Posix obligatoriamente.
 
-### 4.2 Crear `ou=grupos`
+    -   **Solución:** Crear primero un "Generic: Posix Group" (ej: `UsuariosBase`). Esto pobló el desplegable.
 
-Repetir los mismos pasos anteriores, cambiando el nombre a:
+3.  **Error:** `HTTP ERROR 500` al intentar hacer login en la web.
 
-- `ou: grupos`  
+    -   **Causa:** La función `ldap_connect()` no existía porque la extensión LDAP de PHP estaba apagada en el hosting.
 
----
+    -   **Solución:** Entrar al panel (hPanel de Hostinger) > Configuración de PHP > Extensiones PHP > Activar `ldap`.
 
-## 5. Creación de grupos
+4.  **Error:** `Deprecated: Usage of ldap_connect with two arguments`.
 
-### 5.1 Crear el grupo "Profesores"
+    -   **Causa:** PHP 8.x considera obsoleta la sintaxis `$ds = ldap_connect($host, $port)`.
 
-1. Seleccionar `ou=grupos`  
-2. Pulsar **⭐ Create new entry here**  
-3. Seleccionar **Generic: Posix Group**  
-4. Rellenar los campos:
-   - `cn: Profesores`  
-   - `gidNumber: 1000`  
-5. Confirmar la creación  
+    -   **Solución:** Cambiar al formato URI: `$ds = ldap_connect("ldap://$host:$port")`.
 
-Este grupo servirá para asignar permisos a los usuarios profesores.
+5.  **Error:** `Call to a member function prepare() on null`.
 
----
+    -   **Causa:** Discrepancia de librerías. El código original usaba `PDO` (`$pdo->prepare`), pero el archivo `conexion.php` del proyecto estaba instanciado con `mysqli` (`$conn`).
 
-## 6. Creación de usuarios
+    -   **Solución:** Refactorizar las sentencias preparadas en `login.php` para usar la sintaxis de `mysqli` (`bind_param`, `get_result`, etc.).
 
-### 6.1 Usuario de ejemplo: David Granados
+6.  **Error:** `Cannot truncate a table referenced in a foreign key constraint` al intentar limpiar la BD.
 
-1. Seleccionar `ou=usuarios`  
-2. Pulsar **⭐ Create new entry here**  
-3. Seleccionar **Generic: User Account**  
+    -   **Causa:** Medida de seguridad de MariaDB por tener claves foráneas apuntando a la tabla `usuarios`.
 
-### 6.2 Campos configurados
+    -   **Solución:** Desactivar temporalmente los chequeos:
 
-- **First name:** `David`  
-- **Last name:** `Granados`  
-- **Common Name (cn):** `David Granados`  
-- **User ID (uid):** `dgranados`  
-- **Password:** definida por el administrador  
-- **GID Number:** `1000` (grupo *Profesores*)  
-- **Login shell:** `/bin/bash`  
+        SQL
 
-Una vez completado, se confirma con **Create Object → Commit**.
+        ```
+        SET FOREIGN_KEY_CHECKS = 0;
+        TRUNCATE TABLE usuarios;
+        SET FOREIGN_KEY_CHECKS = 1;
 
----
+        ```
 
-## 7. Gestión de contraseñas
+* * * * *
 
-Las contraseñas:
+👥 4. Manual de Uso: Cómo añadir nuevos usuarios al sistema
+-----------------------------------------------------------
 
-- Se almacenan cifradas (SSHA)  
-- No son visibles en texto plano  
-- Pueden modificarse desde la ficha del usuario  
+Gracias a la arquitectura implementada, **no es necesario tocar la base de datos MariaDB para dar de alta a un usuario**.
 
-**Cambiar contraseña:**
+**Pasos para el Administrador:**
 
-1. Seleccionar el usuario  
-2. Editar el campo `userPassword`  
-3. Introducir la nueva contraseña  
-4. Guardar cambios  
+1.  Entrar al panel de **phpLDAPadmin** (`http://[IP_DEL_VPS]:8081`).
 
----
+2.  Desplegar el árbol de directorio (la bola del mundo).
 
-## 8. Verificación de autenticación
+3.  Seleccionar la **Unidad Organizativa (OU)** adecuada según el rol deseado (`ou=Admin`, `ou=Profesores` u `ou=Alumnos`).
 
-Para comprobar que el usuario puede autenticarse correctamente, se utilizó el siguiente comando desde la VPS:
+4.  Clic en *Create new entry here* -> *Generic: User Account*.
 
-```bash
-docker exec -it ldap ldapwhoami -x -H ldap://localhost \
-  -D "cn=David Granados,ou=usuarios,dc=girahub,dc=local" \
-  -w "dgranados"
-```
+5.  Rellenar los campos clave:
 
-Resultado esperado:
+    -   **First Name** y **Last Name**.
 
-```text
-dn:cn=David Granados,ou=usuarios,dc=girahub,dc=local
-```
+    -   **User ID**: Será el nombre de usuario para el login (ej: `npons`).
 
-Esto confirma que:
+    -   **GID Number**: Seleccionar el grupo base del desplegable.
 
-- El usuario existe  
-- La contraseña es correcta  
-- El LDAP funciona correctamente  
+    -   **Password**: Asignar una contraseña inicial.
 
----
+6.  Guardar.
 
-## 9. Buenas prácticas aplicadas
-
-- Separación clara entre usuarios y grupos  
-- Uso de `ou` para organización  
-- DN completos para autenticación  
-- Acceso web seguro por HTTPS  
-- Usuario administrador separado de usuarios normales  
-
----
-
-## 10. Conclusión
-
-La interfaz web **phpLDAPadmin** permite una gestión completa y sencilla del directorio LDAP, facilitando:
-
-- La creación y administración de usuarios  
-- La asignación de grupos  
-- La verificación de accesos  
-- La ampliación futura del sistema  
-
-Este sistema está preparado para integrarse con otras aplicaciones del proyecto, como n8n, garantizando una **autenticación centralizada**.
+**¡Eso es todo!** La primera vez que ese usuario inicie sesión en GiraHub, el sistema lo validará, copiará sus datos y le asignará los permisos de su OU automáticamente en MariaDB.
