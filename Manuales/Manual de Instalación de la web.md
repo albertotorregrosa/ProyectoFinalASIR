@@ -1,119 +1,82 @@
 # Manual (solo web): creación, modificación e integración con n8n/MariaDB
 
-## 1. Qué se ha creado
+1\. Arquitectura del Sistema (Híbrida)
+--------------------------------------
 
-Se ha creado un **frontend** alojado en **Hostinger (hosting compartido)** para el dominio `girahub.es`.  
-Este frontend servirá páginas HTML/CSS/JS y enviará solicitudes al backend (n8n). La web **no accede directamente** a la base de datos.
+El sistema utiliza una arquitectura distribuida para maximizar la seguridad y el rendimiento:
 
----
+-   **Frontend y Lógica de Aplicación:** Alojado en **Hostinger** (Hosting Compartido). Desarrollado en **PHP Vanilla**, HTML5 y CSS3 moderno.
 
-## 2. Cómo se ha creado en Hostinger (pasos realizados)
+-   **Base de Datos:** Motor **MariaDB 11** corriendo en un contenedor **Docker** dentro de un **VPS Ubuntu** (IP: 31.97.157.220).
 
-### 2.1 Acceso al panel correcto
+-   **Automatización:** **n8n** (en proceso) alojado en el VPS para notificaciones e integraciones externas.
 
-Hostinger → **Sitios web** → `girahub.es`
+* * * * *
 
-### 2.2 Elección de panel de gestión
+2\. Conexión de Datos (El Puente)
+---------------------------------
 
-Se seleccionó **cPanel** (no WordPress) para poder trabajar con archivos reales del sitio.
+A diferencia del manual anterior, la web **SÍ accede directamente a la base de datos** mediante el archivo `conexion.php`.
 
-### 2.3 Migración del sitio a hosting web clásico
+-   **Entorno Local:** Conecta a `localhost`.
 
-Se realizó la migración a **cPanel y WHM** para habilitar:
+-   **Entorno Producción:** Conecta vía TCP/IP al VPS remoto por el puerto **3306**.
 
-- Administrador de archivos  
-- Carpeta `public_html`  
-- Edición de `index.html`  
+-   **Seguridad:** El VPS solo acepta conexiones entrantes desde la IP específica de Hostinger (configurado en UFW).
 
----
+* * * * *
 
-## 3. Dónde están los archivos de la web
+3\. Estructura de Archivos en Hostinger
+---------------------------------------
 
-En cPanel:
+Los archivos se encuentran en la raíz `public_html/`. **Es crítico usar rutas absolutas desde la raíz (`/`)** para evitar errores 404 al navegar entre carpetas.
 
-- **File Manager / Administrador de archivos**  
-- Ruta:
+Plaintext
 
-```text
+```
 public_html/
+├── index.php          # Dashboard principal (Calendario)
+├── login.php          # Acceso al sistema (Simulación LDAP/Demo)
+├── conexion.php       # Gestión de conexión dual (Local/Producción) - [GITIGNORE]
+├── includes/          # Componentes reutilizables (Header, Footer)
+├── api/               # Endpoints que devuelven JSON (ej: eventos.php para el calendario)
+├── css/               # Estilos (style.css)
+├── js/                # Lógica del lado del cliente
+└── [carpetas_roles]/ # aulas/, dispositivos/, usuarios/ (Lógica específica)
+
 ```
 
----
+* * * * *
 
-## 4. Cómo se modifica la web
+4\. Gestión de Roles y Permisos
+-------------------------------
 
-### 4.1 Editar `index.html`
+El sistema identifica al usuario mediante `$_SESSION['rol']` tras validar su `ldap_uid`:
 
-cPanel → File Manager → `public_html` → `index.html` → Editar → Guardar.
+1.  **ADMIN:** Acceso total a CRUD de usuarios, aulas y dispositivos. Borrado lógico (soft-delete).
 
-### 4.2 Organización recomendada de archivos
+2.  **PROFESOR:** Reserva de aulas y reporte de incidencias.
 
-Dentro de `public_html`:
+3.  **ALUMNO:** Únicamente reserva de dispositivos.
 
-```text
-public_html/
-├── index.html
-├── css/
-│   └── styles.css
-└── js/
-    └── app.js
-```
+* * * * *
 
-- `index.html`: estructura y formulario  
-- `css/styles.css`: estilos  
-- `js/app.js`: lógica (envío al backend)  
+5\. Reglas de Negocio Estrictas
+-------------------------------
 
----
+-   **Horario Institucional:** Reservas permitidas únicamente de **08:00 a 21:00**.
 
-## 5. Cómo se conecta la web con el sistema (n8n + MariaDB)
+-   **Validación de Solapamiento:** El sistema comprueba en MariaDB que el recurso no esté ocupado antes de confirmar la reserva.
 
-### 5.1 Modelo de conexión (sin acceso directo a la BD)
+-   **Integración n8n:** n8n actuará como oyente (listener) de la base de datos para disparar alertas (Telegram/Email) cuando se cree una reserva o incidencia.
 
-La web se conecta a n8n mediante HTTP, y n8n es quien escribe/lee en MariaDB:
+* * * * *
 
-```text
-Web (Hostinger) → Webhook (n8n en VPS) → MariaDB (VPS)
-```
+6\. Despliegue y Mantenimiento
+------------------------------
 
-**Motivo:** seguridad y separación de capas (la BD no se expone a internet).
+1.  **Repositorio:** El código se sube a GitHub ocultando las credenciales reales mediante un archivo `.gitignore`.
 
-### 5.2 Qué necesita la web para "conectar"
+2.  **Cambios en Caliente:** Se realizan en el Administrador de Archivos de Hostinger o vía FTP.
 
-1. Un formulario en `index.html` con los campos del MVP (los mismos que usa el workflow):
-   - `aula`  
-   - `dispositivo`  
-   - `fecha`  
-   - `hora_inicio`  
-   - `hora_fin`  
-   - `curso`  
-
-2. Un script (`app.js`) que haga un `POST` en JSON al webhook de n8n, por ejemplo:
-
-```text
-https://SUBDOMINIO.DOMINIO/webhook/crear-reserva
-```
-
-### 5.3 Envío típico desde la web (descripción)
-
-- El usuario rellena el formulario.  
-- JavaScript captura el submit.  
-- Se envía un JSON al webhook de n8n.  
-- n8n valida e inserta en MariaDB.  
-- n8n devuelve una respuesta (ok/error) y la web la muestra.  
-
----
-
-## 6. Prueba mínima para verificar que "la web está conectada"
-
-- La web carga desde `girahub.es`.  
-- Al enviar el formulario, el workflow de n8n se ejecuta.  
-- En MariaDB aparece una fila nueva en la tabla `reservas`.  
-
----
-
-## 7. Qué se puede ampliar después (sin cambiar el hosting)
-
-- Añadir páginas (disponibilidad, listado de reservas)  
-- Mostrar respuestas en pantalla (mensajes de éxito/error)  
-- Añadir autenticación y roles (admin/profesor)  
-- Consumir webhooks de "listar reservas" (GET) para pintar tablas en la web 
+3.  **Base de Datos:** Se gestiona vía terminal SSH en el VPS o mediante herramientas como DBeaver/HeidiSQL conectadas a la IP del VPS.
