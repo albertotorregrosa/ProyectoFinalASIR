@@ -3,6 +3,10 @@ Meter las contraseñas aquí:
 CONTRASEÑA GMAIL PROYECTO:
 girahub1@gmail.com, totejavinaza$
 
+contraseña gmail administrador:
+Correo: admingirahub@gmail.com
+Password: totejavinaza$
+
 ENTRAR BASE DE DATOS
 docker exec -it root-mariaDB-1 mysql -u root -p
 contraseña_root

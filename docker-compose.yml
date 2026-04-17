@@ -48,8 +48,10 @@ services:
       - NODE_ENV=production
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
     restart: always
-    ports:
-      - 127.0.0.1:5678:5678
+    deploy:
+      replicas: 2
+#   ports:
+#     - 127.0.0.1:5678:5678
     volumes:
       - n8n_data:/home/node/.n8n
       - /local-files:/files
