@@ -40,3 +40,7 @@ BASE DE DATOS
 | MYSQL_DATABASE      | gira_db         |
 | MYSQL_USER          | gira_user       |
 | MYSQL_PASSWORD      | contraseña_user |
+
+- URL: https
+- Usuario: `admin`
+- Contraseña: `admin123`
